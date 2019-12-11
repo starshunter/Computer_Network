@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>	//inet_addr
 #include <unistd.h> 
@@ -16,9 +17,9 @@ int main(int argc , char *argv[])
 		printf("Could not create socket");
 	}
 		
-	server.sin_addr.s_addr = inet_addr("127.0.0.1");
+	server.sin_addr.s_addr = inet_addr(argv[1]);
 	server.sin_family = AF_INET;
-	server.sin_port = htons(8888);
+	server.sin_port = htons(atoi(argv[2]));
 
 	//Connect to remote server
 	if (connect(socket_desc , (struct sockaddr *)&server , sizeof(server)) < 0)
@@ -58,7 +59,14 @@ int main(int argc , char *argv[])
 			strcpy(message, "REGISTER#");
 			strcat(message, temp);
 			strcat(message, "\n");
-			//strcpy(message, "REGISTER#peter\n");
+
+			send(socket_desc, message, strlen(message), 0);
+			memset(&buffer[0], 0, sizeof(buffer));
+			read(socket_desc, buffer, 1024);
+			if (buffer[0] == '1')
+				printf("User %s register successfully!\n", temp);
+			else
+				printf("User %s has already been registered, please try another user name!\n", temp);
 		}
 		else if (!strcmp(input, "2"))
 		{
@@ -70,12 +78,36 @@ int main(int argc , char *argv[])
 			scanf("%s", temp);
 			strcat(message, temp);
 			strcat(message, "\n");
-			//strcpy(message, "peter#1234\n");
+
+			send(socket_desc, message, strlen(message), 0);
+			memset(&buffer[0], 0, sizeof(buffer));
+			read(socket_desc, buffer, 1024);
+			if (buffer[0] == '2' && buffer[1] == '2' && buffer[2] == '0')
+				printf("This user name has not been registered, please register first or try another user name!\n");
+			else
+				printf("%s", buffer);
 
 		}
 		else if (!strcmp(input, "3"))
 		{
 			strcpy(message, "List\n");
+
+			send(socket_desc, message, strlen(message), 0);
+			memset(&buffer[0], 0, sizeof(buffer));
+			read(socket_desc, buffer, 1024);
+			char *cur = strtok(buffer, "\n");
+			cur = strtok(NULL, "\n");
+			printf("%s\n", cur);
+			cur = strtok(NULL, "\n");
+			while(cur != NULL)
+			{
+				char *usr, *ip, *port;
+				usr = strsep(&cur, "#");
+				ip = strsep(&cur, "#");
+				port = strsep(&cur, "#");
+				printf("User : %s  IP : %s  Port : %s\n", usr, ip, port);
+				cur = strtok(NULL, "\n");
+			}
 
 		}
 		else if (!strcmp(input, "q"))
@@ -84,13 +116,9 @@ int main(int argc , char *argv[])
 			send(socket_desc, message, strlen(message), 0);
 			memset(&buffer[0], 0, sizeof(buffer));
 			read(socket_desc, buffer, 1024);
-			printf("%s", buffer);
+			printf("%s\n", buffer);
 			break;
 		}
-		send(socket_desc, message, strlen(message), 0);
-		memset(&buffer[0], 0, sizeof(buffer));
-		read(socket_desc, buffer, 1024);
-		printf("%s", buffer);
 	}
 	return 0;
 }

@@ -85,7 +85,21 @@ int main(int argc , char *argv[])
 			if (buffer[0] == '2' && buffer[1] == '2' && buffer[2] == '0')
 				printf("This user name has not been registered, please register first or try another user name!\n");
 			else
-				printf("%s", buffer);
+			{
+				char *cur = strtok(buffer, "\n");
+				cur = strtok(NULL, "\n");
+				printf("%s\n", cur);
+				cur = strtok(NULL, "\n");
+				while(cur != NULL)
+				{
+					char *usr, *ip, *port;
+					usr = strsep(&cur, "#");
+					ip = strsep(&cur, "#");
+					port = strsep(&cur, "#");
+					printf("User : %s  IP : %s  Port : %s\n", usr, ip, port);
+					cur = strtok(NULL, "\n");
+				}
+			}
 
 		}
 		else if (!strcmp(input, "3"))

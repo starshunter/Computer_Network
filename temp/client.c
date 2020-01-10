@@ -8,18 +8,24 @@
 #include <stdbool.h>
 #include <iostream>
 #include <errno.h>
+#include <vector>
 #include "threadpool.h"
 
-void *connection_handler(void *);
-void p2p_handler(void *);
+using namespace std;
+
+void *receiver_connection_handler(void *);
+void *sender_connection_handler(void *);
+void p2p_receiver_handler(void *);
+void p2p_sender_handler(void *);
+char p2p_message[1000] = {0};
 
 int main(int argc , char *argv[])
 {
-	int socket_desc, socket_desc2;
-	struct sockaddr_in server, p2p_server;
+	int socket_desc;
+	struct sockaddr_in server;
 	char buffer[1024], username[1024];
 	bool login = false;
-	int user_portnum = 0;
+	int user_portnum = 0, user_balance = 0;
 	//Create socket
 	socket_desc = socket(AF_INET , SOCK_STREAM , 0);
 	if (socket_desc == -1)
@@ -68,7 +74,6 @@ int main(int argc , char *argv[])
 			strcpy(message, "REGISTER#");
 			strcat(message, temp);
 			strcat(message, "\n");
-
 			send(socket_desc, message, strlen(message), 0);
 			memset(&buffer[0], 0, sizeof(buffer));
 			read(socket_desc, buffer, 1024);
@@ -97,8 +102,10 @@ int main(int argc , char *argv[])
 			else
 			{
 				char *cur = strtok(buffer, "\n");
+				printf("Your account balance is %s\n", cur);
+				user_balance = atoi(cur);
 				cur = strtok(NULL, "\n");
-				printf("%s\n", cur);
+				printf("Currently %s user(s) online\n", cur);
 				cur = strtok(NULL, "\n");
 				while(cur != NULL)
 				{
@@ -129,9 +136,9 @@ int main(int argc , char *argv[])
 	{
 		pthread_t thread_id;
 		int client_sock;
-		int pn[1];;
+		int pn[1];
 		pn[0] = user_portnum;
-		if( pthread_create( &thread_id , NULL ,  connection_handler , (void*)pn) < 0)
+		if( pthread_create( &thread_id , NULL ,  receiver_connection_handler , (void*)pn) < 0)
         {
             perror("could not create thread");
             return 1;
@@ -142,6 +149,8 @@ int main(int argc , char *argv[])
 	{
 		printf("Hi %s, what do you want to do? :\n", username);
 		printf("(1) List");
+		printf(" (2) Pay");
+		printf(" (y) Confirm transaction");
 		printf(" (q) Exit\n");
 
 		char input[20];
@@ -149,7 +158,7 @@ int main(int argc , char *argv[])
 		while(1)
 		{
 			scanf("%s", input);
-			if (!strcmp(input, "1") || !strcmp(input, "q"))
+			if (!strcmp(input, "1") || !strcmp(input, "2") || !strcmp(input, "y") || !strcmp(input, "q"))
 				break;
 			printf("There's no operation for %s, please try again\n", input);
 		}
@@ -164,8 +173,10 @@ int main(int argc , char *argv[])
 			memset(&buffer[0], 0, sizeof(buffer));
 			read(socket_desc, buffer, 1024);
 			char *cur = strtok(buffer, "\n");
+			printf("Your account balance is %s\n", cur);
+			user_balance = atoi(cur);
 			cur = strtok(NULL, "\n");
-			printf("%s\n", cur);
+			printf("Currently %s user(s) online\n", cur);
 			cur = strtok(NULL, "\n");
 			while(cur != NULL)
 			{
@@ -177,6 +188,83 @@ int main(int argc , char *argv[])
 				cur = strtok(NULL, "\n");
 			}
 
+		}
+		else if (!strcmp(input, "2"))
+		{
+			strcpy(message, "List\n");
+
+			send(socket_desc, message, strlen(message), 0);
+			memset(&buffer[0], 0, sizeof(buffer));
+			read(socket_desc, buffer, 1024);
+			char *cur = strtok(buffer, "\n");
+			printf("Your account balance is %s\n", cur);
+			user_balance = atoi(cur);
+			cur = strtok(NULL, "\n");
+			printf("Currently %s user(s) online\n", cur);
+			cur = strtok(NULL, "\n");
+			int num = 1;
+			char user_list[100][100], ip_list[100][100], port_list[100][100];
+			while(cur != NULL)
+			{
+				char *usr, *ip, *port;
+				usr = strsep(&cur, "#");
+				strcpy(user_list[num], usr);
+				ip = strsep(&cur, "#");
+				strcpy(ip_list[num], ip);
+				port = strsep(&cur, "#");
+				strcpy(port_list[num], port);
+				printf("%d. User : %s  IP : %s  Port : %s\n", num, usr, ip, port);
+				cur = strtok(NULL, "\n");
+				num++;
+			}
+			puts("Choose the user you want to pay (enter number)?");
+			int payee_num = 0;
+			while(1)
+			{
+				scanf("%d", &payee_num);
+				if(payee_num >= num)
+					printf("There's no user number %d, please try again\n", payee_num);
+				else
+					break;
+			}
+			puts("How many do you want to pay?");
+			int pay_amount = 0;
+			scanf("%d", &pay_amount);
+			if(pay_amount > user_balance)
+				puts("You don't have enough money");
+			else if(!strcmp(username, user_list[payee_num]))
+				puts("You cannot select yourself");
+			else
+			{
+				char client_message[1000] = {0};
+				strcpy(client_message, ip_list[payee_num]);
+				strcat(client_message, "?");
+				strcat(client_message, port_list[payee_num]);
+				strcat(client_message, "?");
+				strcat(client_message, username);
+				strcat(client_message, "#");
+				char payment[10] = {0};
+				sprintf(payment, "%d", pay_amount);
+				strcat(client_message, payment);
+				strcat(client_message, "#");
+				strcat(client_message, user_list[payee_num]);
+				puts(client_message);
+				pthread_t thread_id2;
+				int client_sock;
+				if( pthread_create( &thread_id2 , NULL ,  sender_connection_handler , (void*)client_message) < 0)
+		        {
+		            perror("could not create thread");
+		            return 1;
+		        }
+			}
+		}
+		else if (!strcmp(input, "y"))
+		{
+			if(strlen(p2p_message) > 0)
+			{
+				puts("Transaction confirm");
+				send(socket_desc, p2p_message, strlen(p2p_message), 0);
+			}
 		}
 		else if (!strcmp(input, "q"))
 		{
@@ -191,7 +279,7 @@ int main(int argc , char *argv[])
 	return 0;
 }
 
-void *connection_handler(void *sock)
+void *receiver_connection_handler(void *sock)
 {
 	int *portnum = (int*)sock;
     int socket_desc, client_sock , c;
@@ -228,20 +316,50 @@ void *connection_handler(void *sock)
     while(client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c))
     {
     	puts("Another user has made a transaction with you");
-    	dispatch(tp, p2p_handler, (void*) &client_sock);
+    	puts("Please enter y to confirm transaction");
+    	dispatch(tp, p2p_receiver_handler, (void*) &client_sock);
     }
 } 
 
-void p2p_handler(void *socket_desc)
+void *sender_connection_handler(void *sock)
+{
+	int socket_desc;
+	struct sockaddr_in server;
+	char buffer[1024], username[1024];
+	char *message = (char *)sock;
+	char *ip = strtok(message, "?");
+	char *port = strtok(NULL, "?");
+	char *client_message = strtok(NULL, "?");
+	//Create socket
+	socket_desc = socket(AF_INET , SOCK_STREAM , 0);
+	if (socket_desc == -1)
+	{
+		printf("Could not create socket");
+	}
+		
+	server.sin_addr.s_addr = inet_addr(ip);
+	server.sin_family = AF_INET;
+	server.sin_port = htons(atoi(port));
+
+	//Connect to remote server
+	if (connect(socket_desc , (struct sockaddr *)&server , sizeof(server)) < 0)
+	{
+		puts("connect error");
+	}
+	send(socket_desc, client_message, strlen(client_message), 0);
+} 
+
+void p2p_receiver_handler(void *socket_desc)
 {
 	int sock = *(int*)socket_desc;
     int read_size;
     char client_message[2000];
-    while( (read_size = recv(sock , client_message , 2000 , 0)) > 0 )
-    {
-    	client_message[strlen(client_message)-1] = 0;
-    	puts(client_message);
-    	memset(client_message, 0, sizeof(client_message));
-    }
+    recv(sock , client_message , 2000 , 0);
+
+    client_message[strlen(client_message)] = 0;
+    puts(client_message);
+    memset(p2p_message, 0, sizeof(p2p_message));
+    strcpy(p2p_message, client_message);
+    memset(client_message, 0, sizeof(client_message));
     return;
 }
